@@ -10,7 +10,8 @@
             <div class="mt-1 relative rounded-md shadow-md">
               <input
                 v-model="ticker"
-                @keydown.enter="add"
+                @keyup="tooltipShow"
+                @keydown.enter="add(ticker)"
                 type="text"
                 name="wallet"
                 id="wallet"
@@ -19,30 +20,23 @@
               />
             </div>
             <div class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap">
-              <span 
-                @click = "this.ticker = 'BTC'"
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer">
-                BTC
-              </span>
-              <span 
-                @click = "this.ticker = 'DOGE'"
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer">
-                DOGE
-              </span>
-              <span
-                @click = "this.ticker = 'ETH'" 
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer">
-                ETH
-              </span>
-              <span class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer">
-                CHD
-              </span>
+              <template v-for="similar in similarTickers" :key="similar">
+                <span 
+                  @click = "add(similar)"
+                  class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer">
+                  {{similar}}
+                </span>
+              </template>
             </div>
-            <div class="text-sm text-red-600">Такой тикер уже добавлен</div>
+            <div
+              v-if="error" 
+              class="text-sm text-red-600">
+              Такой тикер уже добавлен
+            </div>
           </div>
         </div>
         <button
-          @click.prevent="add()"
+          @click.prevent="add(ticker)"
           type="button"
           class="my-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
         >
@@ -152,6 +146,7 @@
   import API_KEY from '../config.js'
 
   export default {
+    
     name: "App",
 
     data(){
@@ -159,14 +154,20 @@
         ticker:'',
         tickers: [],
         selectTicker: null,
-        graph: []
+        graph: [],
+        similarTickers:[],
+        error: false
       }
     },
 
     methods:{
-      add(){
+      add(ticker){
+        if(this.tickers.find(t => t.name === ticker)){
+          this.error = true
+          return
+        }
         const newTicker = {
-          name: this.ticker,
+          name: ticker,
           price: "-"
         }
 
@@ -185,6 +186,7 @@
 
         this.tickers.push(newTicker)
         this.ticker = ""
+        this.tooltipShow()
       },
       handleDelete(tickerToRemove){
         this.tickers = this.tickers.filter(t => JSON.stringify(t) !== JSON.stringify(tickerToRemove))
@@ -199,8 +201,44 @@
       changeSelectTicker(ticker){
         this.selectTicker = ticker
         this.graph = []
-      }
-    }
+      },
+      tooltipShow(){
+        this.similarTickers = []
+        this.error = false
+        if(this.ticker.length == 0){
+          return 
+        }
+
+        const coins = JSON.parse(localStorage.getItem('coins'))
+        let countCoin = 0
+        coins.filter(coin => {
+          if(countCoin > 4){
+              return false
+            }
+            if(coin.startsWith(this.ticker.toUpperCase()) && countCoin < 4){
+              countCoin++
+              console.log(coin)
+              this.similarTickers.push(coin)
+              console.log(this.similarTickers)
+              return true
+            }
+        })  
+      },
+    },
+
+    created(){
+      fetch('https://min-api.cryptocompare.com/data/all/coinlist?summary=true')
+        .then(res => res.json())
+        .then(data => {
+          const itemsData = []
+          for(let [key, item] of Object.entries(data.Data)){
+            itemsData.push(item.Symbol)
+          }
+          itemsData.sort()
+          // data = Object.values(data.Data)
+          localStorage.setItem('coins', JSON.stringify(itemsData))
+        })
+    },
 
   }
 </script>
