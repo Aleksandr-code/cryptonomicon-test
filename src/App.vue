@@ -58,9 +58,35 @@
       </section>
       <template v-if="tickers.length">
         <hr class="w-full border-t border-gray-600 my-4" />
+        <div class="flex items-center flex-wrap">
+          <div class="flex items-center w-full max-w-sm">
+            <div class="mr-3 text-base font-bold text-gray-700">Фильтр: </div>
+            <input
+              v-model="filter"
+              type="text" 
+              class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 sm:text-sm rounded-md" placeholder="Найти"> 
+          </div>
+          <div>
+            <button
+            @click = "page--"
+            :disabled = "page <= 1 ? true : false" 
+            type="button" 
+            class="my-4 ml-10 mr-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-300 focus:outline-none disabled:opacity-50">
+              Назад
+            </button>
+            <button
+            @click = "page++" 
+            type="button"
+            :disabled = "page < Math.ceil(showTickers / tickersPerPage) ? false : true" 
+            class="my-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-300 focus:outline-none disabled:opacity-50">
+              Вперед
+            </button>
+          </div>
+        </div>
+        <hr class="w-full border-t border-gray-600 my-4" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
-            v-for="t in tickers"
+            v-for="t in filteredTickers()"
             :key="t.name"
             @click="changeSelectTicker(t)"
             :class="{
@@ -156,40 +182,90 @@
         selectTicker: null,
         graph: [],
         similarTickers:[],
-        error: false
+        error: false,
+        filter:'',
+        page: 1,
+        tickersPerPage: 6,
+        showTickers: null
       }
     },
 
+    created(){
+      const windowData = Object.fromEntries(new URL(window.location).searchParams.entries())
+      if(windowData.filter){
+        this.filter = windowData.filter
+      }
+      if(windowData.page){
+        this.page = windowData.page
+      } 
+      
+      fetch('https://min-api.cryptocompare.com/data/all/coinlist?summary=true')
+        .then(res => res.json())
+        .then(data => {
+          const itemsData = []
+          for(let [key, item] of Object.entries(data.Data)){
+            itemsData.push(item.Symbol)
+          }
+          itemsData.sort()
+          // data = Object.values(data.Data)
+          localStorage.setItem('coins', JSON.stringify(itemsData))
+        })
+      
+      const cryptoList = JSON.parse(localStorage.getItem('cryptonomicon-list'))
+      if(cryptoList){
+        cryptoList.forEach(item => {
+          this.tickers.push(item)
+          // this.subscribeToUpdate(item.name)
+        });
+      }  
+    },
+
     methods:{
+      filteredTickers(){
+        const start = (this.page - 1) * this.tickersPerPage
+        const end = this.page * this.tickersPerPage
+        const filtered = this.tickers.filter(ticker => ticker.name.includes(this.filter.toUpperCase()))
+        this.showTickers = filtered.length
+        
+        return filtered.slice(start, end)
+      },
+      subscribeToUpdate(tickerName){
+        setInterval(async () => {
+          const response = await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD&api_key=${API_KEY}`)
+          const data = await response.json()
+
+          this.tickers.find(t => t.name == tickerName).price = 
+            data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2)
+          
+          if(this.selectTicker?.name === tickerName){
+            this.graph.push(data.USD)
+          }
+
+        }, 5000);
+      },
       add(ticker){
         if(this.tickers.find(t => t.name === ticker)){
           this.error = true
           return
         }
+
         const newTicker = {
           name: ticker,
           price: "-"
         }
 
-        setInterval(async ()=>{
-          const response = await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${newTicker.name}&tsyms=USD&api_key=${API_KEY}`)
-          const data = await response.json()
-
-          this.tickers.find(t => t.name == newTicker.name).price = 
-            data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2)
-          
-          if(this.selectTicker.name === newTicker.name){
-            this.graph.push(data.USD)
-          }
-
-        }, 5000);
-
         this.tickers.push(newTicker)
+        localStorage.setItem('cryptonomicon-list', JSON.stringify(this.tickers))
+
+        this.subscribeToUpdate(newTicker.name)
+
         this.ticker = ""
+        this.filter = ""
         this.tooltipShow()
       },
       handleDelete(tickerToRemove){
         this.tickers = this.tickers.filter(t => JSON.stringify(t) !== JSON.stringify(tickerToRemove))
+        localStorage.setItem('cryptonomicon-list', JSON.stringify(this.tickers))
       },
       normalizeGraph(){
         const minValue = Math.min(...this.graph)
@@ -217,27 +293,21 @@
             }
             if(coin.startsWith(this.ticker.toUpperCase()) && countCoin < 4){
               countCoin++
-              console.log(coin)
               this.similarTickers.push(coin)
-              console.log(this.similarTickers)
               return true
             }
         })  
       },
     },
 
-    created(){
-      fetch('https://min-api.cryptocompare.com/data/all/coinlist?summary=true')
-        .then(res => res.json())
-        .then(data => {
-          const itemsData = []
-          for(let [key, item] of Object.entries(data.Data)){
-            itemsData.push(item.Symbol)
-          }
-          itemsData.sort()
-          // data = Object.values(data.Data)
-          localStorage.setItem('coins', JSON.stringify(itemsData))
-        })
+    watch:{
+      filter(){
+        this.page = 1
+        window.history.pushState(null, document.title, `${window.location.pathname}?filter=${this.filter}&page=${this.page}`)
+      },
+      page(){
+        window.history.pushState(null, document.title, `${window.location.pathname}?filter=${this.filter}&page=${this.page}`)
+      }
     },
 
   }
