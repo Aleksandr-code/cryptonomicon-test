@@ -131,7 +131,9 @@
         <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
           {{selectedTicker.name}} - USD
         </h3>
-        <div class="flex items-end border-gray-600 border-b border-l h-64">
+        <div
+          ref="graph" 
+          class="flex items-end border-gray-600 border-b border-l h-64">
             <div 
               v-for="(bar, idx) in normalizeGraph" 
               :key="idx"
@@ -190,6 +192,7 @@
         selectedTicker: null,
         
         graph: [],
+        maxGraphElements:1,
 
         page: 1,
         tickersPerPage: 6,
@@ -234,7 +237,14 @@
           })
         })
       }
-      
+    },
+
+    mounted(){
+      window.addEventListener('resize', this.calculateMaxGraphElements)
+    },
+
+    beforeUnmount(){
+      window.removeEventListener('resize', this.calculateMaxGraphElements)
     },
 
     computed:{
@@ -278,12 +288,22 @@
     },
 
     methods:{
+      calculateMaxGraphElements(){
+        if(!this.$refs.graph){
+          return
+        }
+        this.maxGraphElements = this.$refs.graph.clientWidth / 38
+      },
       updateTicker(tickerName, price, invalidSub){
         this.tickers
           .filter(t => t.name == tickerName)
           .forEach(t => {
             if(t === this.selectedTicker){
               this.graph.push(price)
+              if(this.graph.length > this.maxGraphElements){
+                this.graph = this.graph.slice(this.graph.length - this.maxGraphElements)
+                // this.graph.shift()
+              }
             }
             t.invalidSub = invalidSub
             t.price = price
@@ -362,6 +382,9 @@
       },
       selectedTicker(){
         this.graph = []
+        this.$nextTick().then(() => {
+          this.calculateMaxGraphElements()
+        })
       },
       filter(){
         this.page = 1
