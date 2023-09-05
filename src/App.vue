@@ -89,11 +89,15 @@
             :key="t.name"
             @click="changeSelectedTicker(t)"
             :class="{
-              'border-2': selectedTicker === t
+              'border-2': selectedTicker === t,
             }"
             class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
           >
-            <div class="px-4 py-5 sm:p-6 text-center">
+            <div
+              :class="{
+                'bg-red-200': t.invalidSub,
+              }" 
+              class="px-4 py-5 sm:p-6 text-center">
               <dt class="text-sm font-medium text-gray-500 truncate">
                 {{ t.name }} - USD
               </dt>
@@ -225,8 +229,8 @@
       if(cryptoList){
         this.tickers = JSON.parse(cryptoList)
         this.tickers.forEach(ticker => {
-          subscribeToTicker(ticker.name, (newPrice) => {
-            this.updateTicker(ticker.name, newPrice)
+          subscribeToTicker(ticker.name, (newPrice, invalidSub) => {
+            this.updateTicker(ticker.name, newPrice, invalidSub)
           })
         })
       }
@@ -274,13 +278,14 @@
     },
 
     methods:{
-      updateTicker(tickerName, price){
+      updateTicker(tickerName, price, invalidSub){
         this.tickers
           .filter(t => t.name == tickerName)
           .forEach(t => {
             if(t === this.selectedTicker){
               this.graph.push(price)
             }
+            t.invalidSub = invalidSub
             t.price = price
           })
       },
@@ -298,13 +303,14 @@
 
         const newTicker = {
           name: tickerName,
-          price: "-"
+          price: "-",
+          invalidSub: false
         }
 
         this.tickers = [...this.tickers, newTicker] 
 
-        subscribeToTicker(tickerName, (newPrice) => {
-            this.updateTicker(tickerName, newPrice)
+        subscribeToTicker(tickerName, (newPrice, invalidSub) => {
+            this.updateTicker(tickerName, newPrice, invalidSub)
         })
 
         this.ticker = ""

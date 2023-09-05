@@ -2,19 +2,28 @@ import API_KEY from '../config.js'
 
 const tickersHandlers = new Map()
 
-// const socket = new WebSocket(`wss://streamer.cryptocompare.com/v2?api_key=${API_KEY}`)
+const socket = new WebSocket(`wss://streamer.cryptocompare.com/v2?api_key=${API_KEY}`)
 
 const AGGREGATE_INDEX = '5';
 
 socket.addEventListener('message', e => {
-    console.log(e)
-    const {TYPE: type, FROMSYMBOL: currency, PRICE: newPrice} = JSON.parse(e.data)
+    // console.log(e)
+    const {TYPE: type, FROMSYMBOL: currency, PRICE: newPrice, MESSAGE: messageData, PARAMETER: parameter} = JSON.parse(e.data)
+    
+    let invalidSub = false
+    if(messageData === 'INVALID_SUB'){
+        const invalidTicker = parameter.split('~')[2]
+        invalidSub = true
+        tickersHandlers.get(invalidTicker).forEach(fn => fn('-', invalidSub))
+    }
+
     if(!type === AGGREGATE_INDEX || newPrice === undefined){
         return
     }
 
     const handlers = tickersHandlers.get(currency) ?? []
-    handlers.forEach(fn => fn(newPrice))
+    // добавлять в коллбэк ошибку
+    handlers.forEach(fn => fn(newPrice, invalidSub))
 })
 
 
